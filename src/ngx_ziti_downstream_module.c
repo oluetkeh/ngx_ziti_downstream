@@ -135,33 +135,6 @@ ngx_ziti_downstream_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
 }
 
 
-// static ngx_int_t
-// ngx_ziti_downstream(ngx_cycle_t *cycle)
-// {
-//     ngx_module_t **modules = cycle->modules;
-//     ngx_module_t *m = NULL;
-//     for (size_t i = 0; i < cycle->modules_n; i++)
-//     {
-//         m = modules[i];
-//         printf("module: %s\n", m->name);
-//         if (m->name == "ngx_ziti_downstream_module") {
-//             break;
-
-//         }
-//     }
-    
-//      printf("========================\n"
-//            "ngx_ziti_downstream: %lu\n", cycle->modules_used);
-//     // ngx_http_core_loc_conf_t  *clcf;
-//     // ngx_log_error(NGX_LOG_NOTICE, cf->log, 0, "ngx ziti downstream ngx_ziti_downstream");
-//     // clcf = ngx_http_conf_get_module_srv_conf(cf, ngx_http_core_module);
-
-//     // clcf->handler = ngx_ziti_downstream_handler;
-
-//     return NGX_OK;
-// }
-
-
 static void 
 nop(uv_async_t *handle, int status) { }
 
@@ -180,7 +153,7 @@ ngx_ziti_downstream_start_uv_loop(ngx_ziti_downstream_srv_conf_t *zscf, ngx_log_
     ngx_int_t                      rc;
 
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, "ngx_ziti_downstream_start_uv_loop: entered");
-
+    ZITI_LOG(DEBUG, "--- ngx_ziti_downstream_start_uv_loop: entered");
     zscf->ztx = NGX_CONF_UNSET_PTR;
     zscf->uv_thread_loop = uv_loop_new();
     uv_async_init(zscf->uv_thread_loop, &zscf->async, (uv_async_cb)nop);
@@ -193,7 +166,6 @@ ngx_ziti_downstream_start_uv_loop(ngx_ziti_downstream_srv_conf_t *zscf, ngx_log_
     ziti_options *opts = ngx_calloc(sizeof(ziti_options), log);
 
     opts->config = (char*)zscf->identity_path.data;
-
     opts->events = ZitiContextEvent;
     opts->event_cb = ngx_ziti_downstream_on_ziti_init;
     opts->refresh_interval = 60;
@@ -244,7 +216,7 @@ ziti_downstream(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 }
 
 void ngx_ziti_downstream_on_ziti_init(ziti_context ztx, const ziti_event_t *ev) {
-    ZITI_LOG(DEBUG, "--- ngx_ziti_downstream_on_ziti_init");
+    ZITI_LOG(DEBUG, "--- ngx_ziti_downstream_on_ziti_init: entered");
     ziti = ztx;
     ziti_connection conn;
     ziti_conn_init(ziti, &conn, NULL);
@@ -258,7 +230,7 @@ void ngx_ziti_downstream_on_ziti_init(ziti_context ztx, const ziti_event_t *ev) 
 }
 
 void ngx_ziti_downstream_listen_cb(ziti_connection serv, int status) {
-    // ZITI_LOG(DEBUG, "--- ngx_ziti_downstream_listen_cb");
+    ZITI_LOG(DEBUG, "--- ngx_ziti_downstream_listen_cb: entered");
     if (status == ZITI_OK) {
         ZITI_LOG(DEBUG, "Ngx ziti downstream module waiting for client data! %d(%s)", status, ziti_errorstr(status));
     }
@@ -303,32 +275,18 @@ ssize_t ngx_ziti_downstream_on_client_data(ziti_connection clt, uint8_t *data, s
         ZITI_LOG(DEBUG, "client sent %d bytes", (int) len);
         ZITI_LOG(TRACE, "client sent these %d bytes:\n%.*s", (int) len, (int) len, data);
 
-        // forward request to upstream server
-        char *reply = malloc(RCV_BUFFER_SIZE);
-        memset(reply,0,RCV_BUFFER_SIZE);
-        int reply_len = talk_to_upstream(reply, "odoo.bomk", 8069, len, data);
-
-        ZITI_LOG(DEBUG, "response from upstream server is %d bytes long.", reply_len);
-        ZITI_LOG(TRACE, "response from upstream server %d bytes:\n%.*s", reply_len, reply_len, reply);
         
-        /* send the reply via ziti */
-        int sent = 0;
-        int ziti_chunk_len = ZITI_MAX_CHUNK_SIZE; 
-        if (reply_len - sent < ziti_chunk_len){
-                ziti_chunk_len = reply_len - sent;
-            } 
-        do {
-            char *ziti_chunk = malloc(ziti_chunk_len+1);
-            strncpy(ziti_chunk, reply+sent, ziti_chunk_len);
-            ZITI_LOG(TRACE, "ziti_chunk to write %d bytes:\n%.*s", ziti_chunk_len, ziti_chunk_len, ziti_chunk);
-            int rc = ziti_write(clt, (uint8_t *) ziti_chunk, ziti_chunk_len, ngx_ziti_downstream_on_client_write, ziti_chunk);
-            sent+=ziti_chunk_len;
-            ZITI_LOG(DEBUG, "ziti_write return code after writing %d of %d bytes: %d", sent, reply_len, rc);
-            if (reply_len - sent < ziti_chunk_len){
-                ziti_chunk_len = reply_len - sent;
-            }
-        } while (sent < reply_len);
-        free(reply);
+        upstream_req_t *req = malloc(sizeof(upstream_req_t));
+        req->clt = clt;
+        req->upstream_server_name="odoo.bomk";
+        req->upstream_port=8069;
+        req->data = data;
+        req->len = len;
+        uv_work_t work;
+        work.data = (void *) req;
+
+        uv_queue_work(uv_thread_loop, &work, process_client_req, NULL);
+        
     }
     else if (len == ZITI_EOF) {
         ZITI_LOG(DEBUG, "client disconnected");
@@ -338,6 +296,34 @@ ssize_t ngx_ziti_downstream_on_client_data(ziti_connection clt, uint8_t *data, s
         ZITI_LOG(DEBUG, "error: %zd(%s)", len, ziti_errorstr(len));
     }
     return len;
+}
+
+void process_client_req(uv_work_t *work){
+    upstream_req_t *req = work->data;
+    // forward request to upstream server
+    char *reply = malloc(RCV_BUFFER_SIZE);
+    memset(reply,0,RCV_BUFFER_SIZE);
+    int reply_len = talk_to_upstream(reply, req->upstream_server_name, req->upstream_port, req->len, req->data);
+
+    /* send the reply via ziti */
+    int sent = 0;
+    int ziti_chunk_len = ZITI_MAX_CHUNK_SIZE; 
+    if (reply_len - sent < ziti_chunk_len){
+            ziti_chunk_len = reply_len - sent;
+        } 
+    do {
+        char *ziti_chunk = malloc(ziti_chunk_len+1);
+        strncpy(ziti_chunk, reply+sent, ziti_chunk_len);
+        ZITI_LOG(TRACE, "ziti_chunk to write %d bytes:\n%.*s", ziti_chunk_len, ziti_chunk_len, ziti_chunk);
+        int rc = ziti_write(req->clt, (uint8_t *) ziti_chunk, ziti_chunk_len, ngx_ziti_downstream_on_client_write, ziti_chunk);
+        sent+=ziti_chunk_len;
+        ZITI_LOG(DEBUG, "ziti_write return code after writing %d of %d bytes: %d", sent, reply_len, rc);
+        if (reply_len - sent < ziti_chunk_len){
+            ziti_chunk_len = reply_len - sent;
+        }
+    } while (sent < reply_len);
+    free(reply);
+
 }
 
 void ngx_ziti_downstream_on_client_write(ziti_connection clt, ssize_t status, void *ctx) {
@@ -414,7 +400,8 @@ int talk_to_upstream(char *response, char *host, int portno, int len, u_int8_t *
         ZITI_LOG(ERROR, "ngx_ziti_downstream: error from upstream server: ERROR: more bytes returned than buffer size. %d", bytes);
         return 0;
     }
-    ZITI_LOG(DEBUG, "ngx_ziti_downstream: response received from upstream. %d bytes", total);
+    ZITI_LOG(DEBUG, "ngx_ziti_downstream: response received from upstream. %d bytes", received);
+    ZITI_LOG(TRACE, "response from upstream server %d bytes:\n%.*s", received, received, response);
 
     /* close the socket */
     close(sockfd);

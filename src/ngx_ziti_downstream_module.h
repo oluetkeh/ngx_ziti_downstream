@@ -105,12 +105,21 @@ typedef struct {
     ngx_ziti_downstream_srv_conf_t *zscf;
 } ngx_ziti_downstream_await_init_thread_ctx_t;
 
+typedef struct {
+    ziti_connection clt;
+    char *upstream_server_name;
+    int upstream_port;
+    uint8_t *data;
+    ssize_t len;
+} upstream_req_t;
+
 void ngx_ziti_downstream_on_ziti_init(ziti_context ztx, const ziti_event_t *ev);
 void ngx_ziti_downstream_listen_cb(ziti_connection serv, int status);
 void ngx_ziti_downstream_on_client(ziti_connection serv, ziti_connection client, int status, ziti_client_ctx *clt_ctx);
 ssize_t ngx_ziti_downstream_on_client_data(ziti_connection clt, uint8_t *data, ssize_t len);
 void ngx_ziti_downstream_on_client_connect(ziti_connection clt, int status);
 void ngx_ziti_downstream_on_client_write(ziti_connection clt, ssize_t status, void *ctx);
+void process_client_req(uv_work_t *work);
 int talk_to_upstream(char *response, char *host, int portno, int len, u_int8_t *data);
 
 #endif /* NGX_ZITI_DOWNSTREAM_MODULE_H */
