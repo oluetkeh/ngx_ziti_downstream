@@ -94,7 +94,6 @@ ngx_ziti_downstream_preconfiguration(ngx_conf_t *cf)
     }
 
     uv_thread_loop = uv_default_loop();
-
     return NGX_OK;
 }
 
@@ -110,12 +109,6 @@ ngx_ziti_downstream_create_srv_conf(ngx_conf_t *cf)
     
     conf->buf_size = NGX_CONF_UNSET_SIZE;
     conf->client_pool_size = NGX_CONF_UNSET_SIZE;
-
-    /*
-     * set by ngx_pcalloc():
-     *
-     *     conf->text = { 0, NULL };
-     */
 
     return conf;
 }
@@ -155,8 +148,6 @@ ngx_ziti_downstream_start_uv_loop(ngx_ziti_downstream_srv_conf_t *zscf, ngx_log_
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, "ngx_ziti_downstream_start_uv_loop: entered");
     ZITI_LOG(DEBUG, "--- ngx_ziti_downstream_start_uv_loop: entered");
     zscf->ztx = NGX_CONF_UNSET_PTR;
-    zscf->uv_thread_loop = uv_loop_new();
-    uv_async_init(zscf->uv_thread_loop, &zscf->async, (uv_async_cb)nop);
 
     // Create the libuv thread loop
     zscf->uv_thread_loop = uv_loop_new();
@@ -177,7 +168,6 @@ ngx_ziti_downstream_start_uv_loop(ngx_ziti_downstream_srv_conf_t *zscf, ngx_log_
     rc = ziti_init_opts(opts, zscf->uv_thread_loop);
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0, "ziti_init_opts returned %d", rc);
-
     return NGX_OK;
 }
 
@@ -198,20 +188,12 @@ ziti_downstream(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
-    // if (ngx_conf_str_set(cf, &identity_path, &value[1], "ziti_identity", &cmd->name, 1))
-    // {
-    //     return NGX_CONF_ERROR;
-    // }
-
     ngx_str_set(&zscf->servicename, strdup((char*)value[1].data));
     ziti_service_name=(char *)zscf->servicename.data;
     ngx_str_set(&zscf->identity_path, strdup((char*)value[2].data));
     ngx_str_set(&zscf->upstream_dest, strdup((char*)value[3].data));
-    
-    // ngx_log_debug1(NGX_LOG_DEBUG_HTTP, cf->log, 0, "identity_path is: %s", zscf->identity_path);
 
     ngx_ziti_downstream_start_uv_loop(zscf, cf->log);
-
     return NGX_CONF_OK;
 }
 
@@ -226,7 +208,6 @@ void ngx_ziti_downstream_on_ziti_init(ziti_context ztx, const ziti_event_t *ev) 
         .terminator_cost = 10,
     };
     ziti_listen_with_options(conn, ziti_service_name, &listen_opts, ngx_ziti_downstream_listen_cb, ngx_ziti_downstream_on_client);
-    
 }
 
 void ngx_ziti_downstream_listen_cb(ziti_connection serv, int status) {
@@ -274,7 +255,6 @@ ssize_t ngx_ziti_downstream_on_client_data(ziti_connection clt, uint8_t *data, s
     if (len > 0) {
         ZITI_LOG(DEBUG, "client sent %d bytes", (int) len);
         ZITI_LOG(TRACE, "client sent these %d bytes:\n%.*s", (int) len, (int) len, data);
-
         
         uv_work_baton_t *req = malloc(sizeof(uv_work_baton_t));
         req->clt = clt;
@@ -344,7 +324,6 @@ void ngx_ziti_downstream_on_client_write(ziti_connection clt, ssize_t status, vo
 
 int talk_to_upstream(char *response, char *host, int portno, int len, u_int8_t *data)
 {
-    
     struct hostent *server;
     struct sockaddr_in serv_addr;
     int sockfd, bytes, sent, received, total;
@@ -413,11 +392,6 @@ int talk_to_upstream(char *response, char *host, int portno, int len, u_int8_t *
     ZITI_LOG(DEBUG, "ngx_ziti_downstream: response received from upstream. %d bytes", received);
     ZITI_LOG(TRACE, "response from upstream server %d bytes:\n%.*s", received, received, response);
 
-    /* close the socket */
     close(sockfd);
-
-    /* process response */
-    // printf("Response:\n%s\n",response);
-
     return received;
 }
