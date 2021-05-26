@@ -266,6 +266,7 @@ ssize_t ngx_ziti_downstream_on_client_data(ziti_connection clt, uint8_t *data, s
         work->data = (void *) req;
 
         uv_queue_work(uv_thread_loop, work, process_upstream, respond_to_client);
+        ZITI_LOG(DEBUG, "request dispatched via uv_queue_work to function process_upstream.");
     }
     else if (len == ZITI_EOF) {
         ZITI_LOG(DEBUG, "client disconnected");
