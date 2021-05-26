@@ -390,7 +390,7 @@ int talk_to_upstream(char *response, char *host, int portno, int len, u_int8_t *
         sent+=bytes;
     } while (sent < total);
 
-    ZITI_LOG(DEBUG, "ngx_ziti_downstream: request sent upstream. %d bytes", total);
+    ZITI_LOG(DEBUG, "ngx_ziti_downstream: request sent upstream. %d bytes", sent);
 
     /* receive the response */
     total = RCV_BUFFER_SIZE-1;
