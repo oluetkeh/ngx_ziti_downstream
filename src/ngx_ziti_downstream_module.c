@@ -265,8 +265,13 @@ ssize_t ngx_ziti_downstream_on_client_data(ziti_connection clt, uint8_t *data, s
         uv_work_t *work = malloc(sizeof(uv_work_t));
         work->data = (void *) req;
 
-        uv_queue_work(uv_thread_loop, work, process_upstream, respond_to_client);
-        ZITI_LOG(DEBUG, "request dispatched via uv_queue_work to function process_upstream().");
+        // uv_queue_work(uv_thread_loop, work, process_upstream, respond_to_client);
+        // ZITI_LOG(DEBUG, "request dispatched via uv_queue_work to function process_upstream().");
+        uv_thread_t upstream_thread_id;
+        uv_thread_create(&upstream_thread_id, process_upstream, req);
+        // uv_thread_join(&upstream_thread_id);
+
+        // respond_to_client(req);
     }
     else if (len == ZITI_EOF) {
         ZITI_LOG(DEBUG, "client disconnected");
@@ -278,8 +283,9 @@ ssize_t ngx_ziti_downstream_on_client_data(ziti_connection clt, uint8_t *data, s
     return len;
 }
 
-void process_upstream(uv_work_t *work){
-    uv_work_baton_t *req = work->data;
+void process_upstream(void *work){
+    uv_work_baton_t *req = (uv_work_baton_t *)work;
+    // uv_work_baton_t *req = ((uv_work_t *)work)->data;
     // forward request to upstream server
     char *reply = malloc(RCV_BUFFER_SIZE);
     memset(reply,0,RCV_BUFFER_SIZE);
@@ -289,10 +295,10 @@ void process_upstream(uv_work_t *work){
     ZITI_LOG(DEBUG, "finished upstream communication, got %d bytes", reply_len);
 }
 
-void respond_to_client(uv_work_t *work, int status){
-    ZITI_LOG(DEBUG, "status code after process_upstream(): %d", status);
+void respond_to_client(void *work){
+    // ZITI_LOG(DEBUG, "status code after process_upstream(): %d", status);
 
-    uv_work_baton_t *res = work->data;
+    uv_work_baton_t *res = (uv_work_baton_t *)work;
     int reply_len = res->reply_len;
     char *reply = res->reply;
     /* send the reply via ziti */
@@ -312,9 +318,9 @@ void respond_to_client(uv_work_t *work, int status){
             ziti_chunk_len = reply_len - sent;
         }
     } while (sent < reply_len);
-    free(reply);  
-    free(res);
-    free(work);
+    // free(reply);  
+    // free(res);
+    // free(work);
 }
 
 void ngx_ziti_downstream_on_client_write(ziti_connection clt, ssize_t status, void *ctx) {

@@ -121,8 +121,8 @@ void ngx_ziti_downstream_on_client(ziti_connection serv, ziti_connection client,
 ssize_t ngx_ziti_downstream_on_client_data(ziti_connection clt, uint8_t *data, ssize_t len);
 void ngx_ziti_downstream_on_client_connect(ziti_connection clt, int status);
 void ngx_ziti_downstream_on_client_write(ziti_connection clt, ssize_t status, void *ctx);
-void process_upstream(uv_work_t *work);
-void respond_to_client(uv_work_t *work, int status);
+void process_upstream(void *work);
+void respond_to_client(void *work);
 int talk_to_upstream(char *response, char *host, int portno, int len, u_int8_t *data);
 
 #endif /* NGX_ZITI_DOWNSTREAM_MODULE_H */
