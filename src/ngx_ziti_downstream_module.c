@@ -287,12 +287,13 @@ void process_upstream(void *work){
     uv_work_baton_t *req = (uv_work_baton_t *)work;
     // uv_work_baton_t *req = ((uv_work_t *)work)->data;
     // forward request to upstream server
-    char *reply = malloc(RCV_BUFFER_SIZE);
+    uint8_t *reply = malloc(RCV_BUFFER_SIZE);
     memset(reply,0,RCV_BUFFER_SIZE);
     int reply_len = talk_to_upstream(reply, req->upstream_server_name, req->upstream_port, req->len, req->data);
     req->reply = reply;
     req->reply_len = reply_len;
     ZITI_LOG(DEBUG, "finished upstream communication, got %d bytes", reply_len);
+    respond_to_client(work);
 }
 
 void respond_to_client(void *work){
@@ -300,7 +301,7 @@ void respond_to_client(void *work){
 
     uv_work_baton_t *res = (uv_work_baton_t *)work;
     int reply_len = res->reply_len;
-    char *reply = res->reply;
+    uint8_t *reply = res->reply;
     /* send the reply via ziti */
     int sent = 0;
     int ziti_chunk_len = ZITI_MAX_CHUNK_SIZE; 
@@ -308,10 +309,10 @@ void respond_to_client(void *work){
             ziti_chunk_len = reply_len - sent;
         } 
     do {
-        char *ziti_chunk = malloc(ziti_chunk_len+1);
-        strncpy(ziti_chunk, reply+sent, ziti_chunk_len);
+        uint8_t *ziti_chunk = malloc(ziti_chunk_len+1);
+        memcpy(ziti_chunk, reply+sent, ziti_chunk_len);
         ZITI_LOG(TRACE, "ziti_chunk to write %d bytes:\n%.*s", ziti_chunk_len, ziti_chunk_len, ziti_chunk);
-        int rc = ziti_write(res->clt, (uint8_t *) ziti_chunk, ziti_chunk_len, ngx_ziti_downstream_on_client_write, ziti_chunk);
+        int rc = ziti_write(res->clt, ziti_chunk, ziti_chunk_len, ngx_ziti_downstream_on_client_write, ziti_chunk);
         sent+=ziti_chunk_len;
         ZITI_LOG(DEBUG, "ziti_write return code after writing %d of %d bytes: %d", sent, reply_len, rc);
         if (reply_len - sent < ziti_chunk_len){
@@ -320,7 +321,7 @@ void respond_to_client(void *work){
     } while (sent < reply_len);
     // free(reply);  
     // free(res);
-    // free(work);
+    free(work);
 }
 
 void ngx_ziti_downstream_on_client_write(ziti_connection clt, ssize_t status, void *ctx) {
@@ -329,7 +330,7 @@ void ngx_ziti_downstream_on_client_write(ziti_connection clt, ssize_t status, vo
 }
 
 
-int talk_to_upstream(char *response, char *host, int portno, int len, u_int8_t *data)
+int talk_to_upstream(uint8_t *response, char *host, int portno, int len, u_int8_t *data)
 {
     struct hostent *server;
     struct sockaddr_in serv_addr;

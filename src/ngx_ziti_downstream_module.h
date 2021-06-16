@@ -111,7 +111,7 @@ typedef struct {
     int upstream_port;
     uint8_t *data;
     ssize_t len;
-    char *reply;
+    uint8_t *reply;
     ssize_t reply_len;
 } uv_work_baton_t;
 
@@ -123,6 +123,6 @@ void ngx_ziti_downstream_on_client_connect(ziti_connection clt, int status);
 void ngx_ziti_downstream_on_client_write(ziti_connection clt, ssize_t status, void *ctx);
 void process_upstream(void *work);
 void respond_to_client(void *work);
-int talk_to_upstream(char *response, char *host, int portno, int len, u_int8_t *data);
+int talk_to_upstream(uint8_t *response, char *host, int portno, int len, u_int8_t *data);
 
 #endif /* NGX_ZITI_DOWNSTREAM_MODULE_H */
