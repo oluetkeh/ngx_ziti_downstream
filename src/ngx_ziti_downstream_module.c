@@ -267,10 +267,10 @@ ssize_t ngx_ziti_downstream_on_client_data(ziti_connection clt, uint8_t *data, s
 
         // uv_queue_work(uv_thread_loop, work, process_upstream, respond_to_client);
         // ZITI_LOG(DEBUG, "request dispatched via uv_queue_work to function process_upstream().");
+
         uv_thread_t upstream_thread_id;
         uv_thread_create(&upstream_thread_id, process_upstream, req);
         // uv_thread_join(&upstream_thread_id);
-
         // respond_to_client(req);
     }
     else if (len == ZITI_EOF) {
