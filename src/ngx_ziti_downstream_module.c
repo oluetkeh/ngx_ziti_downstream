@@ -319,8 +319,7 @@ void respond_to_client(void *work){
             ziti_chunk_len = reply_len - sent;
         }
     } while (sent < reply_len);
-    // free(reply);  
-    // free(res);
+    free(reply);  
     free(work);
 }
 
